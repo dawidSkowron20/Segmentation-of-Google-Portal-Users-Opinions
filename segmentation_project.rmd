@@ -1,0 +1,104 @@
+---
+title: "Projekt_grupowanie"
+author: "Dawid Skowron"
+date: "2023-06-07"
+output:
+  html_document:
+    df_print: paged
+---
+## Opis danych
+Dane zawarte w zbiorze zawierają recenzje wystawione przez użytkwników portalu Google. Dane te w pierwszej kolumnie zawierają indeks, a w każdej innej kolumnie kategorie danego miejsca i średnią ocenę jaką użytkownik wystawia dla danej kategorii. Co warto również zaznaczyć przedział wystawianych ocen zawiera się w skali od 0 do 5 gwiazdek. Oprócz danych źródłowych twórca zbioru załączył również legendę w osobnym pliku, która zostanie wykorzystana przy profilowaniu, by móc zastąpić nazwy kolumn na odpowiednie nazwy kategorii.
+
+## Pobieranie danych.
+```{r}
+reviews <- read.csv("./google_review_ratings.csv", sep=",", header=TRUE,dec=".")
+head(reviews)
+```
+
+## Sprawdzenie przebiegu pobierania danych - czy dane zostały zaimportowane w sposób poprawny.
+```{r}
+summary(reviews)
+```
+
+
+## Usunięcie niepotrzebnych kolumn dla naszej analizy.
+```{r}
+reviews <- reviews[, !(names(reviews) %in% c("X", "User"))]
+head(reviews)
+```
+
+## Przygotowywanie zbioru pod proces grupowania: pominięcie braków danych, ustawienie odpowiedniego typu wartości oraz przeskalowanie danych.
+```{r}
+reviews<- na.omit(reviews) 
+reviews$Category.11 <- as.numeric(reviews$Category.11)
+reviews_normal <- scale(reviews)
+```
+
+
+## Sprawdzenie rozkładu zmiennych.
+```{r}
+library(reshape)
+meltData <- melt(reviews_normal)
+boxplot(data=meltData, value~X2)
+```
+
+
+## Pierwszy etap, który pozwoli na określenie odpowiedniej liczby klastrów - wykres łokcia.
+```{r}
+wss <- (nrow(reviews_normal)-1)*sum(apply(reviews_normal,2,var))
+for (i in 2:15) wss[i] <- sum(kmeans(reviews_normal, centers=i)$withinss)
+plot(1:15, wss, type="b", xlab="Number of Clusters", ylab="Within groups sum of squares")
+```
+
+## Bazując na powyższym wykresie łokcia sprawdzamy grupowanie dla 4 klastrów.
+```{r}
+km <- kmeans(reviews_normal, 4) 
+```
+
+
+## Wykres klastrów pierwszy.
+```{r}
+library(cluster)
+clusplot(reviews_normal, km$cluster, color=TRUE, shade=T, labels=2, lines=0)
+```
+
+## Wykres klastrów drugi.
+```{r}
+library(factoextra)
+fviz_cluster(km, data = reviews_normal)
+```
+
+## Dodatkowo sprawdzamy czy na pewno liczba klastrów równa 4 jest odpowiednia przy pomocy dendogramu.
+```{r}
+d <- dist(reviews_normal, method = "euclidean") #odleglosc euklidesowa 
+fit <- hclust(d, method="ward.D2") # odleglosc miedzy klastrami
+plot(fit) 
+```
+
+# Wykres Silhouetta dla naszego przypadku.
+```{r} 
+d <- dist(reviews_normal, method = "euclidean")
+fviz_silhouette(silhouette(km$cluster, d))
+```
+
+## Zmiana nazw kolumn by móc sprofilować recenzentów.
+```{r}
+colnames(reviews) <- c("churches", "resorts", "beaches", "parks", "theatres", "museums", "malls", "zoo", "restaurants", "pubs/bars", "local services", "burger/pizza shops", "hotels/other lodgings", "juice bars", "art galleries", "dance clubs", "swimming pools", "gyms", "bakeries", "beauty and spas", "cafes", "view points", "monuments", "gardens")
+```
+
+
+## Otatecznie profilujemy naszych klientów.
+```{r fig.height=12, fig.width=10}
+library(flexclust)
+barchart(fit, reviews, k =4)
+```
+Profilowanie
+  
+Cluster 1: Jest to najbardziej liczny klaster ponieważ stanowi aż 47% przypadków w naszym zbiorze. Recenzenci w tym klastrze posiadają najbardziej zbliżone recenzje do średnich dla całego zbioru. Wystawiają oni bardzo niskie oceny w takich miejscach jak: siłownie, piekarnie, parki wodne. Natomiast wystawiają bardzo wysokie noty w miejscach takich jak: teatry, parki czy też muzea.
+  
+Cluster 2: Drugi najbardziej liczny klaster. Zauważyć można podobieństwo względem poprzedniego klastra jeżeli chodzi o wystawiane recenzje. Jednakże osoby te chętnie pozostawiają wysokie oceny w takich miejscach jak: restauracje, bary, zoo czy też galerie handlowe. W kontekście reszty klastrów wystawiają oni najniższe oceny w takich miejscach jak siłownie i piekarnie.
+  
+Cluster 3: Osoby należące do tego klastra w odróżnieniu od innych w żadnym miejscu nie pozostawiają opinii poniżej jednej gwiazdki. Recenzje wystawiane przez nich mieszczą się w granicy od 1 gwiazdki do 3 i ciężko zauważyć znaczące odchylenia pod względem oceny dla danego miejsca. Mimo to zauważyć można iż osoby te pozostawiają po sobie najwyższe noty w miejscach takich jak np. kościoły, parki wodne, ogrody czy też pominiki. Wystawiają oni również najniżej punktowane opinie, w porównaniu do osób należących do innych klastrów, w miejscach takich jak: restauracje, bary oraz burgerownie /pizzerie.
+  
+Cluster 4: Najmniej liczny klaster, zawierający najabrdziej skrajne opinie gdyż osoby te należące do niego wystawiają bardzo niskie oceny w takich miejscach jak np. kościoły, kawiarnie, punkty widokowe, pominiki, ogrody, muzea, teatry, plaże i parki. Mimo tego iż osoby te wystawiają tak wiele negatywnych opinii w wielu miejscach, zauważyć można iż pozostawiają oni bardzo wysokie oceny po odwiedzeniu takich miejsc jak: hotele, bary z sokami, burgerownie/pizzerie i galerie sztuki.
+
